@@ -1,33 +1,108 @@
 'use strict';
 
-require('@code-fellows/supergoose');
-const supertest = require('supertest');
-const { it } = require('@jest/globals');
-const base64 = require('base-64');
-const server = require('../src/app.js');
-const mockServer = supertest(server.app);
+process.env.SECRET = "toes";
 
-describe('Sign Up - Sign Up Routers', ()=>{
-  it('create new user' , async ()=>{
-    let user = {username: "Malak", password:'123'};
-    let test = await mockServer.post('/signup').send(user);
+const server = require('../src/app.js').server;
+const supergoose = require('@code-fellows/supergoose');
+const bearer = require('../src/auth/middleware/bearer.js');
 
-    expect(test.status).toEqual(201);
-    expect(test.body.username).toEqual("Malak");
+const mockRequest = supergoose(server);
+
+let users = {
+  admin: { username: 'admin', password: 'password' },
+  editor: { username: 'editor', password: 'password' },
+  user: { username: 'user', password: 'password' },
+};
+
+describe('Auth Router', () => {
+
+  Object.keys(users).forEach(userType => {
+
+    describe(`${userType} users`, () => {
+
+      it('can create one', async () => {
+
+        const response = await mockRequest.post('/signup').send(users[userType]);
+        const userObject = response.body;
+
+        expect(response.status).toBe(200);
+        expect(userObject.token).toBeDefined();
+        expect(userObject.user._id).toBeDefined();
+        expect(userObject.user.username).toEqual(users[userType].username)
+
+      });
+
+      it('can signin with basic', async () => {
+
+        const response = await mockRequest.post('/signin')
+          .auth(users[userType].username, users[userType].password);
+
+        const userObject = response.body;
+        expect(response.status).toBe(200);
+        expect(userObject.token).toBeDefined();
+        expect(userObject.user._id).toBeDefined();
+        expect(userObject.user.username).toEqual(users[userType].username)
+
+      });
+
+      it('can signin with bearer', async () => {
+
+        // First, use basic to login to get a token
+        const response = await mockRequest.post('/signin')
+          .auth(users[userType].username, users[userType].password);
+
+        const token = response.body.token;
+
+        // First, use basic to login to get a token
+        const bearerResponse = await mockRequest
+          .get('/users')
+          .set('Authorization', `Bearer ${token}`)
+
+        // Not checking the value of the response, only that we "got in"
+        expect(bearerResponse.status).toBe(200);
+
+      });
+
+    });
+
+    describe('bad logins', () => {
+      it('basic fails with known user and wrong password ', async () => {
+
+        const response = await mockRequest.post('/signin')
+          .auth('admin', 'xyz')
+        const userObject = response.body;
+
+        expect(response.status).toBe(403);
+        expect(userObject.user).not.toBeDefined();
+        expect(userObject.token).not.toBeDefined();
+
+      });
+
+      it('basic fails with unknown user', async () => {
+
+        const response = await mockRequest.post('/signin')
+          .auth('nobody', 'xyz')
+        const userObject = response.body;
+
+        expect(response.status).toBe(403);
+        expect(userObject.user).not.toBeDefined();
+        expect(userObject.token).not.toBeDefined()
+
+      });
+
+      it('bearer fails with an invalid token', async () => {
+
+        // First, use basic to login to get a token
+        const bearerResponse = await mockRequest
+          .get('/users')
+          .set('Authorization', `Bearer foobar`)
+
+        // Not checking the value of the response, only that we "got in"
+        expect(bearerResponse.status).toBe(403);
+
+      })
+    })
+
   });
-  it('authenticate the log in user', async ()=>{
-    let encoded = base64.encode('Malak:123');
-    let authHeader = `Basic ${encoded}`;
 
-    let test = await mockServer.post('/signin').set({Authorization: authHeader});
-    expect(test.status).toEqual(200);
-  });
-
-  it('doesn\'t auth if the password is wrong' ,async ()=>{
-    let encoded = base64.encode('Malak:12A3');
-    let authHeader = `Basic ${encoded}`;
-
-    let test = await mockServer.post('/signin').set({Authorization: authHeader});
-    expect(test.status).toEqual(500);
-  });
-}); 
+});

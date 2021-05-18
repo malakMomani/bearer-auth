@@ -1,45 +1,43 @@
 'use strict';
 
 const express = require('express');
-const bcrypt = require('bcrypt');
-const Users = require('./models/users-model.js');
-const basicAuth = require('./middleware/basic.js');
+const authRouter = express.Router();
+
+const User = require('./models/users-model.js');
+const basicAuth = require('./middleware/basic.js')
 const bearerAuth = require('./middleware/bearer.js')
 
-const router = express.Router();
-
-router.post('/signup', async (req, res) => {
-
+authRouter.post('/signup', async (req, res, next) => {
   try {
-    // console.log('I\'m here');
-    const user = new Users(req.body);
-    const record = await user.save(req.body);
-    res.status(201).json(record);
-  } catch (e) { res.status(403).send(e,"Error Creating User"); }
-});
-
-
-router.post('/signin', basicAuth, async (req, res) => {
-
-  try {
-    let user = Users.findOne({username : req.body.username});
-    // console.log(req.body.username);
-    // console.log(user._conditions.username);
-    res.cookie('auth-token',req.token);
-    res.set('auth-token',req.token);
-    res.status(200).json({
-      user : user._conditions.username 
-    });
-  } catch(error) {
-    res.status(403).send('Error signing in');
+    let user = new User(req.body);
+    const userRecord = await user.save();
+    const output = {
+      user: userRecord,
+      token: userRecord.token
+    };
+    res.status(200).json(output);
+  } catch (e) {
+    next(e.message)
   }
-
-      
 });
 
-router.get('/user', bearerAuth, (req, res)=> {
-  // for logged in users
-  res.status(200).json(req.user);
+authRouter.post('/signin', basicAuth, (req, res, next) => {
+  const user = {
+    user: req.user,
+    token: req.user.token
+  };
+  res.status(200).json(user);
 });
 
-module.exports = router;
+authRouter.get('/users', bearerAuth, async (req, res, next) => {
+  const users = await User.find({});
+  const list = users.map(user => user.username);
+  res.status(200).json(list);
+});
+
+authRouter.get('/secret', bearerAuth, async (req, res, next) => {
+  res.status(200).send("Welcome to the secret area!")
+});
+
+
+module.exports = authRouter;
