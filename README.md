@@ -7,6 +7,6 @@
 
 [Pull Request](https://github.com/malakMomani/bearer-auth/pull/1)
 
-[heroku deployment](https://malak-basic-auth.herokuapp.com/)
+[heroku deployment](https://malak-bearer-auth.herokuapp.com)
 
 ![UML Digranm](access-token.jpg)
